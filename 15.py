@@ -9,50 +9,51 @@ from pprint import pprint
 from heapdict import heapdict
 
 
-WIDTH = 4
+WIDTH = 3
 HEIGHT = 3
 
-State = namedtuple('State', 'cells empty')
-
-goal = State(tuple(range(1, WIDTH*HEIGHT)+[0]), WIDTH*HEIGHT-1)
+goal = tuple(range(1, WIDTH*HEIGHT)+[0])
 
 
 def print_state(state):
     for i in range(HEIGHT):
         for j in range(WIDTH):
-            print '{:2}'.format(state.cells[i*WIDTH+j]),
+            print '{:2}'.format(state[i*WIDTH+j]),
         print
 
 
 def parity(state):
-    cnt = state.empty%WIDTH + state.empty//WIDTH
-    for i, x in enumerate(state.cells):
-        for y in state.cells[:i]:
+    empty = state.index(0)
+    cnt = empty%WIDTH + empty//WIDTH
+    for i, x in enumerate(state):
+        for y in state[:i]:
             if y > x:
                 cnt += 1
     return cnt%2
 
 
 def adjanced(state):
-    def move_to(new_empty):
-        c = list(state.cells)
-        c[state.empty] = c[new_empty]
-        c[new_empty] = 0
-        return State(tuple(c), new_empty)
+    empty = state.index(0)
 
-    if state.empty >= WIDTH:
-        yield 'u', move_to(state.empty-WIDTH)
-    if state.empty < WIDTH*(HEIGHT-1):
-        yield 'd', move_to(state.empty+WIDTH)
-    if state.empty % WIDTH > 0:
-        yield 'l', move_to(state.empty-1)
-    if state.empty % WIDTH < WIDTH-1:
-        yield 'r', move_to(state.empty+1)
-    
+    def move_to(new_empty):
+        c = list(state)
+        c[empty] = c[new_empty]
+        c[new_empty] = 0
+        return tuple(c)
+
+    if empty >= WIDTH:
+        yield 'u', move_to(empty-WIDTH)
+    if empty < WIDTH*(HEIGHT-1):
+        yield 'd', move_to(empty+WIDTH)
+    if empty % WIDTH > 0:
+        yield 'l', move_to(empty-1)
+    if empty % WIDTH < WIDTH-1:
+        yield 'r', move_to(empty+1)
+
 
 def num_misplaced(state):
     n = 0
-    for x, y in zip(state.cells, goal.cells):
+    for x, y in zip(state, goal):
         if x != y and x != 0:
             n += 1
     return n
@@ -60,7 +61,7 @@ def num_misplaced(state):
 
 def manhattan_dist(state):
     dist = 0
-    for pos, k in enumerate(state.cells):
+    for pos, k in enumerate(state):
         if k == 0:
             continue
         dist += abs(pos % WIDTH - (k-1) % WIDTH)
@@ -71,7 +72,7 @@ def manhattan_dist(state):
 def random_position():
     c = range(WIDTH*HEIGHT)
     shuffle(c)
-    return State(tuple(c), c.index(0))
+    return tuple(c)
 
 
 def a_star(start, heuristic, stats):
@@ -127,7 +128,7 @@ def main():
         print heuristic
 
         n = 0
-        time_limit = default_timer()+1000
+        time_limit = default_timer()+20
         while default_timer() < time_limit:
             while True:
                 s = random_position()
