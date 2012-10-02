@@ -9,7 +9,7 @@ from pprint import pprint
 from heapdict import heapdict
 
 
-WIDTH = 3
+WIDTH = 4
 HEIGHT = 3
 
 goal = tuple(range(1, WIDTH*HEIGHT)+[0])
@@ -119,16 +119,123 @@ def show_path(start, moves):
         print_state(s)
 
 
+def compare_heuristics():
+    heuristics = [
+        num_misplaced,
+        manhattan_dist,
+        row_db_heuristic,
+        col_db_heuristic,
+    ]
+
+    stats = defaultdict(int)
+    for _ in range(100000):
+        while True:
+            s = random_position()
+            if parity(s) == parity(goal):
+                break
+        m = max(heuristics, key=lambda h: h(s))
+        stats[m] += 1
+    print dict(stats)
+
+
+def mask(subset, state):
+    return tuple(x if x == 0 or x in subset else -1 for x in state)
+
+
+def build_template_shard(subset):
+    #print mask(subset, goal)
+
+    g = mask(subset, goal)
+    queue = [g]
+    next_queue = []
+    costs = {}
+
+    dist = 0
+
+    while True:
+        while queue:
+            s = queue.pop()
+            if s in costs:
+                continue
+            costs[s] = dist
+            empty = s.index(0)
+            for _, s2 in adjanced(s):
+                if s2 in costs:
+                    continue
+                if s2[empty] == -1:
+                    queue.append(s2)
+                else:
+                    next_queue.append(s2)
+
+        if len(next_queue) == 0:
+            break
+        queue = next_queue
+        next_queue = []
+        dist += 1
+
+    return costs
+
+
+def build_template_db(partition):
+    assert set.union(*map(set, partition)) == set(range(1, WIDTH*HEIGHT))
+    assert sum(map(len, partition)) == WIDTH*HEIGHT-1
+    print 'buiding db...',
+    result = {}
+    for subset in partition:
+        result[tuple(subset)] = build_template_shard(subset)
+    print 'done,', sum(map(len, result.values())), 'templates'
+    return result
+
+
+def create_db_heuristic(partition):
+    # dict {subset: dict {masked state: cost}}
+    template_db = build_template_db(partition)
+
+    def db_cost(state):
+        result = 0
+        for k, v in template_db.items():
+            result += v[mask(k, state)]
+        return result
+
+    return db_cost
+
+
+k = 4
+xs = range(1, WIDTH*HEIGHT)
+
+partition = [xs[i:i+k] for i in range(0, len(xs), k)]
+row_db_heuristic = create_db_heuristic(partition)
+
+m = (len(xs)+k-1)//k
+partition = [xs[i::m] for i in range(m)]
+col_db_heuristic = create_db_heuristic(partition)
+
+
 def main():
+    compare_heuristics()
+    print
+    #return
+
     def zero(s):
         return 0
 
-    for heuristic in manhattan_dist, num_misplaced: # , zero:
+    def all_db(s):
+        return max(row_db_heuristic(s), col_db_heuristic(s))
+
+    heuristics = [
+        all_db,
+        col_db_heuristic,
+        row_db_heuristic,
+        #manhattan_dist,
+        #num_misplaced
+    ]
+
+    for heuristic in heuristics:
         stats = defaultdict(int)
         print heuristic
 
         n = 0
-        time_limit = default_timer()+20
+        time_limit = default_timer()+300
         while default_timer() < time_limit:
             while True:
                 s = random_position()
@@ -141,6 +248,7 @@ def main():
         #pprint(dict(stats))
         for key in sorted(stats):
             print key, stats[key]/n
+        print 'states/s', stats['states']/(stats['time']+1e-6)
         print
 
 
