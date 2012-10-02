@@ -1,7 +1,7 @@
 from __future__ import division
 
 from math import *
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, Counter
 from random import shuffle
 from timeit import default_timer
 from pprint import pprint
@@ -12,34 +12,34 @@ from heapdict import heapdict
 WIDTH = 4
 HEIGHT = 3
 
-goal = tuple(range(1, WIDTH*HEIGHT)+[0])
+goal = ''.join(map(chr, range(1, WIDTH*HEIGHT)+[0]))
 
 
 def print_state(state):
     for i in range(HEIGHT):
         for j in range(WIDTH):
-            print '{:2}'.format(state[i*WIDTH+j]),
+            print '{:2}'.format(ord(state[i*WIDTH+j])),
         print
 
 
 def parity(state):
-    empty = state.index(0)
+    empty = state.index(chr(0))
     cnt = empty%WIDTH + empty//WIDTH
     for i, x in enumerate(state):
         for y in state[:i]:
-            if y > x:
+            if ord(y) > ord(x):
                 cnt += 1
     return cnt%2
 
 
 def adjanced(state):
-    empty = state.index(0)
+    empty = state.index(chr(0))
 
     def move_to(new_empty):
         c = list(state)
         c[empty] = c[new_empty]
-        c[new_empty] = 0
-        return tuple(c)
+        c[new_empty] = chr(0)
+        return ''.join(c)
 
     if empty >= WIDTH:
         yield 'u', move_to(empty-WIDTH)
@@ -54,7 +54,7 @@ def adjanced(state):
 def num_misplaced(state):
     n = 0
     for x, y in zip(state, goal):
-        if x != y and x != 0:
+        if x != y and x != chr(0):
             n += 1
     return n
 
@@ -62,6 +62,7 @@ def num_misplaced(state):
 def manhattan_dist(state):
     dist = 0
     for pos, k in enumerate(state):
+        k = ord(k)
         if k == 0:
             continue
         dist += abs(pos % WIDTH - (k-1) % WIDTH)
@@ -72,7 +73,7 @@ def manhattan_dist(state):
 def random_position():
     c = range(WIDTH*HEIGHT)
     shuffle(c)
-    return tuple(c)
+    return ''.join(map(chr, c))
 
 
 def a_star(start, heuristic, stats):
@@ -139,18 +140,18 @@ def compare_heuristics():
 
 
 def mask(subset, state):
-    return tuple(x if x == 0 or x in subset else -1 for x in state)
+    return ''.join(x if x == chr(0) or ord(x) in subset else chr(255) 
+                   for x in state)
 
 
 def build_template_shard(subset):
-    #print mask(subset, goal)
-
     g = mask(subset, goal)
     queue = [g]
     next_queue = []
     costs = {}
 
     dist = 0
+    prev_size = 0
 
     while True:
         while queue:
@@ -158,11 +159,11 @@ def build_template_shard(subset):
             if s in costs:
                 continue
             costs[s] = dist
-            empty = s.index(0)
+            empty = s.index(chr(0))
             for _, s2 in adjanced(s):
                 if s2 in costs:
                     continue
-                if s2[empty] == -1:
+                if s2[empty] == chr(255):
                     queue.append(s2)
                 else:
                     next_queue.append(s2)
@@ -172,16 +173,20 @@ def build_template_shard(subset):
         queue = next_queue
         next_queue = []
         dist += 1
+        print dist, len(costs)-prev_size
+        prev_size = len(costs)
 
+    print sorted(Counter(costs.values()).items())
     return costs
 
 
 def build_template_db(partition):
     assert set.union(*map(set, partition)) == set(range(1, WIDTH*HEIGHT))
     assert sum(map(len, partition)) == WIDTH*HEIGHT-1
-    print 'buiding db...',
+    print 'buiding db...'
     result = {}
     for subset in partition:
+        print ' ', subset
         result[tuple(subset)] = build_template_shard(subset)
     print 'done,', sum(map(len, result.values())), 'templates'
     return result
@@ -200,20 +205,32 @@ def create_db_heuristic(partition):
     return db_cost
 
 
-k = 4
+k = 3
 xs = range(1, WIDTH*HEIGHT)
 
 partition = [xs[i:i+k] for i in range(0, len(xs), k)]
 row_db_heuristic = create_db_heuristic(partition)
 
+"""
 m = (len(xs)+k-1)//k
 partition = [xs[i::m] for i in range(m)]
 col_db_heuristic = create_db_heuristic(partition)
+"""
+
+def random_partition(num_parts):
+    xs = range(1, WIDTH*HEIGHT)
+    shuffle(xs)
+    return [xs[i::num_parts] for i in range(num_parts)]
+
+
+def create_multidb_heuristic(num_funcs, num_parts):
+    hs = [create_db_heuristic(random_partition(num_parts)) for i in range(num_funcs)]
+    return lambda state: max(h(state) for h in hs)
 
 
 def main():
-    compare_heuristics()
-    print
+    #compare_heuristics()
+    #print
     #return
 
     def zero(s):
@@ -223,8 +240,9 @@ def main():
         return max(row_db_heuristic(s), col_db_heuristic(s))
 
     heuristics = [
-        all_db,
-        col_db_heuristic,
+        #all_db,
+        #col_db_heuristic,
+        create_multidb_heuristic(1, 3),
         row_db_heuristic,
         #manhattan_dist,
         #num_misplaced
@@ -235,7 +253,7 @@ def main():
         print heuristic
 
         n = 0
-        time_limit = default_timer()+300
+        time_limit = default_timer()+30
         while default_timer() < time_limit:
             while True:
                 s = random_position()
